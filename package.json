@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "react": "^19.2.3",
-    "lucide-react": "^0.561.0",
-    "react-dom": "^19.2.3",
-    "date-fns": "^4.1.0",
-    "mathjs": "^15.1.0"
+    "lucide-react": "0.263.1",
+    "date-fns": "2.30.0",
+    "mathjs": "11.8.0",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

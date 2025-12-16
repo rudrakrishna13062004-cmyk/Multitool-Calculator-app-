@@ -10,7 +10,6 @@
       body {
         font-family: 'Inter', sans-serif;
       }
-      /* Custom scrollbar for better aesthetics */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -26,21 +25,454 @@
         background: #94a3b8;
       }
     </style>
-  <script type="importmap">
+    <!-- Babel for in-browser JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.263.1?deps=react@18.2.0",
+    "date-fns": "https://esm.sh/date-fns@2.30.0",
+    "mathjs": "https://esm.sh/mathjs@11.8.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "date-fns": "https://esm.sh/date-fns@^4.1.0",
-    "mathjs": "https://esm.sh/mathjs@^15.1.0"
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
-</head>
+  </head>
   <body class="bg-gray-50 text-slate-900 antialiased h-screen overflow-hidden">
     <div id="root" class="h-full w-full"></div>
-    <script type="module" src="/index.tsx"></script>
+    
+    <!-- Main Application Script -->
+    <script type="text/babel" data-type="module" data-presets="typescript,react">
+      import React, { useState, useEffect, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { Calculator, Calendar, Sigma, Menu, X, Delete, History, RotateCcw, Cake, Clock, Hourglass, FunctionSquare, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+      import * as math from 'mathjs';
+      import { differenceInYears, differenceInMonths, differenceInDays, addYears, isValid, format, parse, intervalToDuration } from 'date-fns';
+
+      // ==========================================
+      // 1. Scientific Calculator Component
+      // ==========================================
+      const ScientificButton = ({ label, func, className = '', onClick }) => (
+        <button
+            onClick={() => onClick(func)}
+            className={`h-12 text-sm font-medium rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:scale-95 transition-transform ${className}`}
+        >
+            {label}
+        </button>
+      );
+
+      const ScientificCalculator = () => {
+        const [display, setDisplay] = useState('0');
+        const [history, setHistory] = useState([]);
+        const [isNewCalculation, setIsNewCalculation] = useState(true);
+        const [showHistory, setShowHistory] = useState(false);
+        const displayRef = useRef(null);
+
+        const handleInput = (val) => {
+            if (display === 'Error') {
+                setDisplay(val);
+                setIsNewCalculation(false);
+                return;
+            }
+            if (isNewCalculation) {
+                setDisplay(val);
+                setIsNewCalculation(false);
+            } else {
+                setDisplay(display === '0' ? val : display + val);
+            }
+        };
+
+        const handleOperator = (op) => {
+            if (display === 'Error') return;
+            setIsNewCalculation(false);
+            const lastChar = display.slice(-1);
+            if (['+', '-', '*', '/', '^', '%', '.'].includes(lastChar)) {
+                setDisplay(display.slice(0, -1) + op);
+            } else {
+                setDisplay(display + op);
+            }
+        };
+
+        const handleScientificInput = (func) => {
+            setIsNewCalculation(false);
+            if (display === '0' && func !== '.') {
+                setDisplay(func);
+            } else if (display === 'Error') {
+                setDisplay(func);
+            } else {
+                setDisplay(display + func);
+            }
+        };
+
+        const handleClear = () => {
+            setDisplay('0');
+            setIsNewCalculation(true);
+        };
+
+        const handleDelete = () => {
+            if (display === 'Error') {
+                handleClear();
+                return;
+            }
+            if (display.length === 1) {
+                setDisplay('0');
+                setIsNewCalculation(true);
+            } else {
+                setDisplay(display.slice(0, -1));
+            }
+        };
+
+        const calculate = () => {
+            try {
+                let expression = display;
+                // Auto-close parentheses
+                const openParens = (expression.match(/\(/g) || []).length;
+                const closeParens = (expression.match(/\)/g) || []).length;
+                if (openParens > closeParens) {
+                    expression += ')'.repeat(openParens - closeParens);
+                }
+
+                const result = math.evaluate(expression);
+                const formattedResult = math.format(result, { precision: 10 });
+                
+                const newHistoryItem = `${expression} = ${formattedResult}`;
+                setHistory(prev => [newHistoryItem, ...prev].slice(0, 10));
+                
+                setDisplay(String(formattedResult));
+                setIsNewCalculation(true);
+            } catch (error) {
+                setDisplay('Error');
+                setIsNewCalculation(true);
+            }
+        };
+
+        // Keyboard support
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+                if (document.activeElement instanceof HTMLButtonElement && e.key === 'Enter') return;
+                const key = e.key;
+
+                if (/[0-9]/.test(key) && key.length === 1) handleInput(key);
+                else if (key === '.') handleInput(key);
+                else if (['+', '-', '*', '/', '%', '^'].includes(key)) {
+                    e.preventDefault();
+                    handleOperator(key);
+                } else if (key === 'Enter' || key === '=') {
+                    e.preventDefault();
+                    calculate();
+                } else if (key === 'Backspace') handleDelete();
+                else if (key === 'Escape') handleClear();
+                else if (key === '(' || key === ')') handleScientificInput(key);
+            };
+
+            window.addEventListener('keydown', handleKeyDown);
+            return () => window.removeEventListener('keydown', handleKeyDown);
+        }, [display, isNewCalculation, history]);
+
+        const scientificFunctions = [
+            { label: 'sin', func: 'sin(' }, { label: 'cos', func: 'cos(' }, { label: 'tan', func: 'tan(' },
+            { label: 'log', func: 'log10(' }, { label: 'ln', func: 'log(' }, { label: '√', func: 'sqrt(' },
+            { label: '(', func: '(' }, { label: ')', func: ')' }, { label: '^', func: '^' },
+            { label: 'π', func: 'pi' }, { label: 'e', func: 'e' }, { label: '!', func: '!' },
+        ];
+
+        return (
+            <div className="flex flex-col md:flex-row gap-6 h-[calc(100vh-140px)] min-h-[500px]">
+                <div className="flex-1 bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col border border-slate-200">
+                    <div className="bg-slate-900 p-6 sm:p-8 flex flex-col justify-end items-end min-h-[160px] relative">
+                        <button 
+                            onClick={() => setShowHistory(!showHistory)}
+                            className={`absolute top-4 left-4 p-2 rounded-full transition-colors ${showHistory ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                            title="History"
+                        >
+                            <History size={20} />
+                        </button>
+                        <div className="text-slate-400 text-sm mb-2 h-6 font-mono tracking-wider overflow-hidden w-full text-right whitespace-nowrap opacity-70">
+                            {history.length > 0 && !isNewCalculation ? 'Ans = ' + history[0].split('=')[1].trim() : ''}
+                        </div>
+                        <div ref={displayRef} className="text-4xl sm:text-6xl font-light text-white tracking-tight break-all text-right w-full font-mono">
+                            {display}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 p-4 bg-white flex flex-col gap-4">
+                        <div className="grid grid-cols-6 gap-2">
+                            {scientificFunctions.map((btn) => (
+                                <ScientificButton key={btn.label} label={btn.label} func={btn.func} onClick={handleScientificInput} />
+                            ))}
+                        </div>
+                        <hr className="border-slate-100" />
+                        <div className="grid grid-cols-4 gap-3 flex-1">
+                            <button onClick={handleClear} className="col-span-1 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors">AC</button>
+                            <button onClick={handleDelete} className="col-span-1 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center"><Delete size={20} /></button>
+                            <button onClick={() => handleOperator('%')} className="bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors">%</button>
+                            <button onClick={() => handleOperator('/')} className="bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-xl">÷</button>
+
+                            {[7, 8, 9].map(num => (
+                                <button key={num} onClick={() => handleInput(num.toString())} className="bg-slate-50 text-slate-900 font-semibold text-xl rounded-xl hover:bg-slate-100 transition-colors py-4">{num}</button>
+                            ))}
+                            <button onClick={() => handleOperator('*')} className="bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-xl">×</button>
+
+                            {[4, 5, 6].map(num => (
+                                <button key={num} onClick={() => handleInput(num.toString())} className="bg-slate-50 text-slate-900 font-semibold text-xl rounded-xl hover:bg-slate-100 transition-colors py-4">{num}</button>
+                            ))}
+                            <button onClick={() => handleOperator('-')} className="bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-xl">-</button>
+
+                            {[1, 2, 3].map(num => (
+                                <button key={num} onClick={() => handleInput(num.toString())} className="bg-slate-50 text-slate-900 font-semibold text-xl rounded-xl hover:bg-slate-100 transition-colors py-4">{num}</button>
+                            ))}
+                            <button onClick={() => handleOperator('+')} className="bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-xl">+</button>
+
+                            <button onClick={() => handleInput('0')} className="col-span-2 bg-slate-50 text-slate-900 font-semibold text-xl rounded-xl hover:bg-slate-100 transition-colors">0</button>
+                            <button onClick={() => handleInput('.')} className="bg-slate-50 text-slate-900 font-semibold text-xl rounded-xl hover:bg-slate-100 transition-colors">.</button>
+                            <button onClick={calculate} className="bg-indigo-600 text-white font-bold text-xl rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-transform active:scale-95">=</button>
+                        </div>
+                    </div>
+                </div>
+
+                {showHistory && (
+                    <div className="w-full md:w-80 bg-white rounded-3xl shadow-xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-semibold text-slate-700 flex items-center gap-2"><History size={18} /> Calculation History</h3>
+                            <button onClick={() => setHistory([])} className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50">Clear All</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {history.length === 0 ? <div className="text-center text-slate-400 py-10 text-sm">No history yet</div> : history.map((item, idx) => {
+                                const [expr, res] = item.split('=');
+                                return (
+                                    <button key={idx} onClick={() => { setDisplay(res.trim()); setIsNewCalculation(true); }} className="w-full text-right group p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all">
+                                        <div className="text-xs text-slate-500 mb-1 group-hover:text-indigo-500 font-mono">{expr} =</div>
+                                        <div className="text-lg font-semibold text-slate-800 font-mono">{res}</div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+      };
+
+      // ==========================================
+      // 2. Age Calculator Component
+      // ==========================================
+      const AgeCalculator = () => {
+        const [birthDate, setBirthDate] = useState('');
+        const [targetDate, setTargetDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+        const [result, setResult] = useState(null);
+        const [nextBirthday, setNextBirthday] = useState(null);
+        const [totalDays, setTotalDays] = useState(null);
+
+        useEffect(() => { calculateAge(); }, [birthDate, targetDate]);
+
+        const calculateAge = () => {
+            if (!birthDate || !targetDate) return;
+            const start = new Date(birthDate);
+            const end = new Date(targetDate);
+            if (!isValid(start) || !isValid(end)) return;
+            if (start > end) { setResult(null); setNextBirthday(null); setTotalDays(null); return; }
+
+            const duration = intervalToDuration({ start, end });
+            setResult({ years: duration.years || 0, months: duration.months || 0, days: duration.days || 0 });
+            setTotalDays(differenceInDays(end, start));
+
+            const currentYear = end.getFullYear();
+            let nextBday = new Date(start);
+            nextBday.setFullYear(currentYear);
+            if (nextBday < end) nextBday.setFullYear(currentYear + 1);
+            
+            setNextBirthday({ days: differenceInDays(nextBday, end), dayOfWeek: format(nextBday, 'EEEE') });
+        };
+
+        const Card = ({ title, icon: Icon, children, className = '' }) => (
+            <div className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 ${className}`}>
+                <div className="flex items-center gap-2 mb-4 text-slate-500 text-sm font-medium uppercase tracking-wider"><Icon size={16} />{title}</div>
+                {children}
+            </div>
+        );
+
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start animate-in fade-in duration-500">
+                <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 md:col-span-2 lg:col-span-1">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-3"><span className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Calendar size={24} /></span>Date Details</h2>
+                    <div className="space-y-6">
+                        <div><label className="block text-sm font-medium text-slate-700 mb-2">Date of Birth</label><input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-lg text-slate-800" /></div>
+                        <div className="relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center"><span className="bg-white px-2 text-sm text-slate-400">Calculated To</span></div></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-2">Target Date (Default: Today)</label><input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-lg text-slate-800" /></div>
+                    </div>
+                </div>
+
+                <div className="md:col-span-2 lg:col-span-1 grid grid-cols-1 gap-4">
+                    {result ? (
+                        <>
+                            <div className="bg-indigo-600 rounded-3xl p-8 text-white shadow-lg shadow-indigo-200 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-8 opacity-10"><Hourglass size={120} /></div>
+                                <p className="text-indigo-200 font-medium mb-1">Exact Age</p>
+                                <div className="flex items-baseline gap-2 flex-wrap relative z-10">
+                                    <span className="text-6xl font-bold tracking-tighter">{result.years}</span><span className="text-xl opacity-80 mr-4">years</span>
+                                    <span className="text-4xl font-bold tracking-tighter">{result.months}</span><span className="text-lg opacity-80 mr-4">months</span>
+                                    <span className="text-4xl font-bold tracking-tighter">{result.days}</span><span className="text-lg opacity-80">days</span>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Card title="Next Birthday" icon={Cake} className="bg-pink-50 border-pink-100">{nextBirthday ? <div><div className="text-3xl font-bold text-pink-600 mb-1">{nextBirthday.days}</div><div className="text-sm text-pink-400 font-medium">Days Remaining</div><div className="text-xs text-pink-400 mt-2">On a {nextBirthday.dayOfWeek}</div></div> : <span className="text-slate-400">-</span>}</Card>
+                                <Card title="Total Days Lived" icon={Clock} className="bg-amber-50 border-amber-100">{totalDays !== null ? <div><div className="text-3xl font-bold text-amber-600 mb-1">{totalDays.toLocaleString()}</div><div className="text-sm text-amber-400 font-medium">Days</div></div> : <span className="text-slate-400">-</span>}</Card>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="h-full bg-slate-100 rounded-3xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 p-8 text-center min-h-[300px]">
+                            <Calendar size={48} className="mb-4 opacity-50" /><p className="font-medium">Enter a valid Date of Birth</p><p className="text-sm mt-1">To see detailed age statistics</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+      };
+
+      // ==========================================
+      // 3. Algebra Calculator Component
+      // ==========================================
+      const AlgebraMode = { SIMPLIFY: 'SIMPLIFY', QUADRATIC: 'QUADRATIC', LINEAR: 'LINEAR' };
+
+      const AlgebraCalculator = () => {
+        const [mode, setMode] = useState(AlgebraMode.SIMPLIFY);
+        const [expression, setExpression] = useState('');
+        const [simplifiedResult, setSimplifiedResult] = useState('');
+        const [error, setError] = useState('');
+        const [quadA, setQuadA] = useState('');
+        const [quadB, setQuadB] = useState('');
+        const [quadC, setQuadC] = useState('');
+        const [quadResult, setQuadResult] = useState(null);
+
+        const handleSimplify = () => {
+            try {
+                setError('');
+                if (!expression.trim()) return;
+                const result = math.simplify(expression).toString();
+                setSimplifiedResult(result);
+            } catch (err) {
+                setError('Invalid expression. Check syntax.');
+                setSimplifiedResult('');
+            }
+        };
+
+        const handleQuadratic = () => {
+            try {
+                setError('');
+                const a = parseFloat(quadA);
+                const b = parseFloat(quadB);
+                const c = parseFloat(quadC);
+                if (isNaN(a) || isNaN(b) || isNaN(c)) { setError('Please enter valid numbers'); return; }
+                if (a === 0) { setError("'a' cannot be zero for a quadratic equation"); return; }
+                const discriminant = b * b - 4 * a * c;
+                if (discriminant > 0) {
+                    const x1 = (-b + Math.sqrt(discriminant)) / (2 * a);
+                    const x2 = (-b - Math.sqrt(discriminant)) / (2 * a);
+                    setQuadResult({ x1: x1.toFixed(4), x2: x2.toFixed(4) });
+                } else if (discriminant === 0) {
+                    const x = -b / (2 * a);
+                    setQuadResult({ x1: x.toFixed(4), x2: x.toFixed(4) });
+                } else {
+                    const realPart = (-b / (2 * a)).toFixed(4);
+                    const imagPart = (Math.sqrt(-discriminant) / (2 * a)).toFixed(4);
+                    setQuadResult({ x1: `${realPart} + ${imagPart}i`, x2: `${realPart} - ${imagPart}i` });
+                }
+            } catch (err) { setError('Calculation error'); }
+        };
+
+        const TabButton = ({ targetMode, label }) => (
+            <button onClick={() => { setMode(targetMode); setError(''); setSimplifiedResult(''); setQuadResult(null); }} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${mode === targetMode ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>{label}</button>
+        );
+
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 inline-flex gap-2">
+                        <TabButton targetMode={AlgebraMode.SIMPLIFY} label="Expression Simplifier" />
+                        <TabButton targetMode={AlgebraMode.QUADRATIC} label="Quadratic Solver" />
+                    </div>
+                    <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 min-h-[400px]">
+                        {mode === AlgebraMode.SIMPLIFY && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div><h2 className="text-2xl font-bold text-slate-800 mb-2">Simplify Expression</h2><p className="text-slate-500">Enter a mathematical expression to simplify it.</p></div>
+                                <div className="relative">
+                                    <input type="text" value={expression} onChange={(e) => setExpression(e.target.value)} placeholder="e.g. 2x + 3x + 5" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xl font-mono text-slate-800" onKeyDown={(e) => e.key === 'Enter' && handleSimplify()} />
+                                    <button onClick={handleSimplify} className="absolute right-3 top-3 bg-indigo-600 text-white p-2.5 rounded-lg hover:bg-indigo-700 transition-colors"><ArrowRight size={20} /></button>
+                                </div>
+                                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-sm text-indigo-800"><strong>Supported:</strong> Basic arithmetic (+ - * /), variables (x, y), powers (^), parentheses ().</div>
+                            </div>
+                        )}
+                        {mode === AlgebraMode.QUADRATIC && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div><h2 className="text-2xl font-bold text-slate-800 mb-2">Quadratic Equation</h2><p className="text-slate-500">Solves for x in standard form: <strong>ax² + bx + c = 0</strong></p></div>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div><label className="block text-sm font-semibold text-slate-600 mb-2">a (x² coeff)</label><input type="number" value={quadA} onChange={(e) => setQuadA(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuadratic()} placeholder="1" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-lg" /></div>
+                                    <div><label className="block text-sm font-semibold text-slate-600 mb-2">b (x coeff)</label><input type="number" value={quadB} onChange={(e) => setQuadB(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuadratic()} placeholder="5" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-lg" /></div>
+                                    <div><label className="block text-sm font-semibold text-slate-600 mb-2">c (constant)</label><input type="number" value={quadC} onChange={(e) => setQuadC(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleQuadratic()} placeholder="6" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-lg" /></div>
+                                </div>
+                                <button onClick={handleQuadratic} className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95">Solve Equation</button>
+                            </div>
+                        )}
+                        {error && <div className="flex items-center gap-2 text-red-600 bg-red-50 p-4 rounded-xl border border-red-100 animate-in fade-in"><AlertCircle size={20} />{error}</div>}
+                    </div>
+                </div>
+                <div className="bg-slate-900 text-white rounded-3xl p-8 shadow-xl flex flex-col relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-5"><Sigma size={200} /></div>
+                    <h3 className="text-slate-400 uppercase tracking-wider text-sm font-semibold mb-6">Result</h3>
+                    <div className="flex-1 flex flex-col justify-center">
+                        {mode === AlgebraMode.SIMPLIFY && (simplifiedResult ? <div className="space-y-4 animate-in zoom-in-95 duration-300"><div className="text-slate-400 text-sm font-mono">Input: {expression}</div><div className="text-4xl font-mono font-bold text-green-400 break-all">{simplifiedResult}</div></div> : <div className="text-slate-600 text-center italic">Result will appear here...</div>)}
+                        {mode === AlgebraMode.QUADRATIC && (quadResult ? <div className="space-y-6 animate-in zoom-in-95 duration-300"><div><div className="text-slate-400 text-xs uppercase mb-1">Root 1</div><div className="text-3xl font-mono font-bold text-green-400">x₁ = {quadResult.x1}</div></div><div className="w-full h-px bg-slate-800" /><div><div className="text-slate-400 text-xs uppercase mb-1">Root 2</div><div className="text-3xl font-mono font-bold text-green-400">x₂ = {quadResult.x2}</div></div></div> : <div className="text-slate-600 text-center italic">Roots will appear here...</div>)}
+                    </div>
+                </div>
+            </div>
+        );
+      };
+
+      // ==========================================
+      // 4. Main App Component
+      // ==========================================
+      const AppModeEnum = { SCIENTIFIC: 'SCIENTIFIC', AGE: 'AGE', ALGEBRA: 'ALGEBRA' };
+
+      const App = () => {
+        const [mode, setMode] = useState(AppModeEnum.SCIENTIFIC);
+        const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+        const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+        const NavButton = ({ targetMode, icon: Icon, label }) => (
+            <button onClick={() => { setMode(targetMode); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${mode === targetMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>
+                <Icon size={20} /><span className="font-medium">{label}</span>
+            </button>
+        );
+
+        return (
+            <div className="flex h-screen bg-gray-50 overflow-hidden">
+                {isSidebarOpen && <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
+                <aside className={`fixed md:relative z-30 w-72 h-full bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} shadow-xl md:shadow-none flex flex-col`}>
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center"><div className="flex items-center gap-2 text-indigo-600"><div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">Ω</div><h1 className="text-xl font-bold tracking-tight text-slate-900">OmniCalc</h1></div><button onClick={toggleSidebar} className="md:hidden text-slate-400 hover:text-slate-600"><X size={24} /></button></div>
+                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 px-4">Tools</div>
+                        <NavButton targetMode={AppModeEnum.SCIENTIFIC} icon={Calculator} label="Scientific" />
+                        <NavButton targetMode={AppModeEnum.AGE} icon={Calendar} label="Age Calculator" />
+                        <NavButton targetMode={AppModeEnum.ALGEBRA} icon={Sigma} label="Algebra Solver" />
+                    </nav>
+                    <div className="p-4 border-t border-slate-100"><div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-500 text-center"><p>v1.0.0 • Offline Capable</p></div></div>
+                </aside>
+                <main className="flex-1 flex flex-col min-w-0 bg-gray-50">
+                    <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10">
+                        <div className="flex items-center gap-3"><button onClick={toggleSidebar} className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg"><Menu size={24} /></button><h2 className="text-lg font-semibold text-slate-800">{mode === AppModeEnum.SCIENTIFIC && 'Scientific Calculator'}{mode === AppModeEnum.AGE && 'Age Calculator'}{mode === AppModeEnum.ALGEBRA && 'Algebra Solver'}</h2></div>
+                    </header>
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8"><div className="max-w-4xl mx-auto h-full">{mode === AppModeEnum.SCIENTIFIC && <ScientificCalculator />}{mode === AppModeEnum.AGE && <AgeCalculator />}{mode === AppModeEnum.ALGEBRA && <AlgebraCalculator />}</div></div>
+                </main>
+            </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
   </body>
 </html>
