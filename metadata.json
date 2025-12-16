@@ -1,0 +1,5 @@
+{
+  "name": "OmniCalc Suite",
+  "description": "A comprehensive calculator suite featuring Scientific, Age, and Algebra tools without requiring external APIs.",
+  "requestFramePermissions": []
+}
